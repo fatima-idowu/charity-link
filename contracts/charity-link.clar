@@ -255,3 +255,58 @@
     )
   )
 )
+
+;; Approves fund utilization with balance verification (admin only)
+(define-public (approve-utilization
+    (beneficiary-id uint)
+    (milestone uint)
+  )
+  (let (
+      (utilization-entry (unwrap! (map-get? utilization { id: milestone }) ERR-UTILIZATION-NOT-FOUND))
+      (beneficiary (unwrap! (get-beneficiary beneficiary-id) ERR-BENEFICIARY-NOT-FOUND))
+    )
+    (if (and
+        (is-authorized tx-sender ROLE-ADMIN)
+        (is-eq (get beneficiary-id utilization-entry) beneficiary-id)
+        (<= beneficiary-id (var-get beneficiary-count)) ;; Validate beneficiary exists
+        (<= milestone (var-get utilization-count)) ;; Validate milestone exists
+      )
+      (if (<= (get amount utilization-entry) (get received-amount beneficiary))
+        (begin
+          (map-set utilization { id: milestone }
+            (merge utilization-entry { status: "approved" })
+          )
+          (ok true)
+        )
+        ERR-INSUFFICIENT-FUNDS
+      )
+      ERR-NOT-AUTHORIZED
+    )
+  )
+)
+
+;; Retrieves utilization milestone details by ID
+(define-read-only (get-utilization-by-id (utilization-id uint))
+  (match (map-get? utilization { id: utilization-id })
+    util (ok util)
+    ERR-NOT-FOUND
+  )
+)
+
+;; Returns total utilization records count
+(define-read-only (get-utilization-count)
+  (ok (var-get utilization-count))
+)
+
+;; CONTRACT INITIALIZATION
+
+;; Initializes contract with deployer as primary administrator
+(define-private (initialize-contract)
+  (begin
+    (map-set roles { user: tx-sender } { role: ROLE-ADMIN })
+    (var-set contract-owner tx-sender)
+  )
+)
+
+;; Execute contract initialization sequence
+(initialize-contract)
